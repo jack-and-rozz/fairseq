@@ -10,13 +10,34 @@ Train a new model on one or across multiple GPUs.
 import collections
 import math
 import random
-
 import torch
 
 from fairseq import checkpoint_utils, distributed_utils, options, progress_bar, tasks, utils
 from fairseq.data import iterators
 from fairseq.trainer import Trainer
 from fairseq.meters import AverageMeter, StopwatchMeter
+
+
+
+def output_config(args, config_path):
+    import yaml
+
+    with open(config_path, 'w') as f: 
+        f.write(yaml.dump(args.__dict__) + '\n')
+
+
+def output_trainable_params(modules, params_path):
+  res = []
+  for m in modules:
+    for name, param in m.named_parameters():
+      if param.requires_grad:
+        res.append((name, param.data))
+  res = set(res)
+  res = sorted([(name, list(tensor.shape)) for name, tensor in res], key=lambda x: x[0])
+  with open(params_path, 'w') as f:
+      for name, shape in res:
+          f.write('%s %s\n' % (name, str(shape)))
+  return res
 
 
 def main(args, init_distributed=False):
@@ -36,7 +57,10 @@ def main(args, init_distributed=False):
         checkpoint_utils.verify_checkpoint_directory(args.save_dir)
 
     # Print args
-    print(args)
+    model_root = '/'.join(args.save_dir.split('/')[:-1])
+    config_path = model_root + '/config.yaml'
+    params_path = model_root + '/parameters.txt'
+    output_config(args, config_path)
 
     # Setup task, e.g., translation, language modeling, etc.
     task = tasks.setup_task(args)
@@ -48,6 +72,9 @@ def main(args, init_distributed=False):
     # Build model and criterion
     model = task.build_model(args)
     criterion = task.build_criterion(args)
+
+    output_trainable_params(model, params_path)
+
     print(model)
     print('| model {}, criterion {}'.format(args.arch, criterion.__class__.__name__))
     print('| num. model params: {} (num. trained: {})'.format(
