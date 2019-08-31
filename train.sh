@@ -39,9 +39,18 @@ shared_settings="-layers 6 -rnn_size 512 -word_vec_size 512 \
 case $mode in
     aspec.baseline)
 	data_dir=dataset/aspec-je/processed.kytea-moses
-	data_options="$data_dir/fairseq \
-       	              --encoder-embed-path $data_dir/word2vec.en.512d.500k \
-       	              --decoder-embed-path $data_dir/word2vec.ja.512d.500k"
+	data_options="$data_dir/fairseq.50k-50k \
+       	              --encoder-embed-path $data_dir/word2vec.en.512d \
+       	              --decoder-embed-path $data_dir/word2vec.ja.512d"
+	task_options="--task translation \
+		      --source-lang en \
+		      --target-lang ja"
+	;;
+    jesc.baseline)
+	data_dir=dataset/jesc-je/processed.kytea-moses
+	data_options="$data_dir/fairseq.50k-50k \
+       	              --encoder-embed-path $data_dir/word2vec.en.512d \
+       	              --decoder-embed-path $data_dir/word2vec.ja.512d"
 	task_options="--task translation \
 		      --source-lang en \
 		      --target-lang ja"
@@ -53,6 +62,8 @@ esac
 
 # Start training.
 python train.py \
+       --ddp-backend=no_c10d \
+       --log-interval 50 --log-format simple \
        --save-dir $target_dir/checkpoints \
        --tensorboard-logdir $target_dir/tensorboard \
        --arch transformer \
@@ -60,20 +71,17 @@ python train.py \
        $data_options \
        --update-freq 2 \
        --num-workers 2 \
-       --batch-size 4096 \
+       --max-tokens 4096 \
        --max-update 200000 \
        --optimizer adam --adam-betas '(0.9, 0.98)' \
        --lr 1e-03 --min-lr 1e-09 \
        --lr-scheduler inverse_sqrt \
        --warmup-init-lr 1e-07 --warmup-updates 4000 \
        --criterion label_smoothed_cross_entropy --label-smoothing 0.1 \
-       --max-source-positions 50 --max-target-positions 50 \
+       --dropout 0.1 \
        --encoder-layers 6 --decoder-layers 6 \
        --encoder-attention-heads 8 --decoder-attention-heads 8 \
        --encoder-ffn-embed-dim 2048 \
        --decoder-ffn-embed-dim 2048 \
-       --share-decoder-input-output-embed 
-       > $target_dir/train.log
-       
-
-#-fix_word_vecs_enc - fix_word_vecs_dec 
+       --share-decoder-input-output-embed \
+       >> $target_dir/train.log 
