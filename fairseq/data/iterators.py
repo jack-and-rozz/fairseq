@@ -185,7 +185,11 @@ class EpochBatchIterator(EpochBatchIterating):
 
     def end_of_epoch(self) -> bool:
         """Returns whether the most recent epoch iterator has been exhausted"""
-        return not self._cur_epoch_itr.has_next()
+        if self._cur_epoch_itr:
+            return not self._cur_epoch_itr.has_next()
+        else:
+            return True
+        # return not self._cur_epoch_itr.has_next()
 
     @property
     def iterations_in_epoch(self):

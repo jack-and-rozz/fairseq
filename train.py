@@ -18,14 +18,13 @@ from fairseq.trainer import Trainer
 from fairseq.meters import AverageMeter, StopwatchMeter
 
 def output_architecture(model, arch_path):
-    with open(arch_path, 'w') as f: 
+    with open(arch_path, 'w') as f:
         f.write(str(model) + '\n')
 
 def output_config(args, config_path):
     import yaml
-    with open(config_path, 'w') as f: 
+    with open(config_path, 'w') as f:
         f.write(yaml.dump(args.__dict__) + '\n')
-
 
 def output_trainable_params(model, params_path):
   res = []
@@ -39,7 +38,7 @@ def output_trainable_params(model, params_path):
           f.write('%s %s\n' % (name, str(shape)))
   return res
 
-
+import ast
 def main(args, init_distributed=False):
     utils.import_user_module(args)
 
@@ -92,6 +91,7 @@ def main(args, init_distributed=False):
         args.max_sentences,
     ))
 
+
     # Load the latest checkpoint if one is available and restore the
     # corresponding train iterator
     extra_state, epoch_itr = checkpoint_utils.load_checkpoint(args, trainer)
@@ -103,6 +103,12 @@ def main(args, init_distributed=False):
     train_meter = StopwatchMeter()
     train_meter.start()
     valid_subsets = args.valid_subset.split(',')
+
+    # No training.
+    if args.max_update < 0:
+        valid_losses = validate(args, trainer, task, epoch_itr, valid_subsets)
+        checkpoint_utils.save_checkpoint(args, trainer, epoch_itr, valid_losses[0])
+
     while lr > args.min_lr and epoch_itr.epoch < max_epoch and trainer.get_num_updates() < max_update:
         # train for one epoch
         train(args, trainer, task, epoch_itr)

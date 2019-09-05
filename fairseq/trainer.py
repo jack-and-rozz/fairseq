@@ -160,13 +160,24 @@ class Trainer(object):
         reset_optimizer=False,
         reset_lr_scheduler=False,
         optimizer_overrides=None,
+        embedding_overrides=False,
         reset_meters=False,
+        args_overrides={},
     ):
         """Load all training state from a checkpoint file."""
         extra_state, self._optim_history, last_optim_state = None, [], None
 
         if os.path.exists(filename):
-            state = checkpoint_utils.load_checkpoint_to_cpu(filename)
+            state = checkpoint_utils.load_checkpoint_to_cpu(filename,
+                                                            args_overrides)
+
+            if embedding_overrides:
+                # Before restoring checkpoint, embeddings were loaded to the model via file so write it to the state.
+                model = self.get_model()
+                state['model']['encoder.embed_tokens.weight'].data = model.encoder.embed_tokens.weight.data
+
+                if hasattr(state['model'], 'decoder.embed_tokens.weight'):
+                    state['model']['decoder.embed_tokens.weight'].data = model.decoder.embed_tokens.weight.data
 
             # load model parameters
             try:

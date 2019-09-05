@@ -11,6 +11,7 @@ import os
 import re
 import traceback
 import shutil
+from pprint import pprint
 
 import torch
 from torch.serialization import default_restore_location
@@ -100,13 +101,16 @@ def load_checkpoint(args, trainer):
         checkpoint_path = os.path.join(args.save_dir, 'checkpoint_last.pt')
     else:
         checkpoint_path = args.restore_file
-
+    args_overrides = args.__dict__ if args.reset_args else {}
     extra_state = trainer.load_checkpoint(
         checkpoint_path,
         args.reset_optimizer,
         args.reset_lr_scheduler,
         eval(args.optimizer_overrides),
+        embedding_overrides=args.override_embeddings,
         reset_meters=args.reset_meters,
+        args_overrides=args_overrides, # for fine-tuning
+        #model_overrides=eval(args.model_overrides),  # for fine-tuning
     )
 
     if (
@@ -227,6 +231,7 @@ def save_state(
         optim_history = []
     if extra_state is None:
         extra_state = {}
+
     state_dict = {
         'args': args,
         'model': model_state_dict if model_state_dict else {},

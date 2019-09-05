@@ -401,6 +401,13 @@ def add_checkpoint_args(parser):
                        help='metric to use for saving "best" checkpoints')
     group.add_argument('--maximize-best-checkpoint-metric', action='store_true',
                        help='select the largest metric value for saving "best" checkpoints')
+
+    # Arguments for fine-tuning
+    group.add_argument('--reset-args', action='store_true',
+                       help='if set, arguments stored in checkpoint are overwritten by current args')
+    group.add_argument('--override-embeddings', action='store_true',
+                       help='if set, embeddings stored in checkpoint are not loaded and overridden by the pretrained embeddings for initialization. ')
+
     # fmt: on
     return group
 
