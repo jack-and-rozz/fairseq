@@ -53,7 +53,6 @@ def main(args):
             nwords=args.nwordssrc if src else args.nwordstgt,
             padding_factor=args.padding_factor,
         )
-
     if not args.srcdict and os.path.exists(dict_path(args.source_lang)):
         raise FileExistsError(dict_path(args.source_lang))
     if target and not args.tgtdict and os.path.exists(dict_path(args.target_lang)):

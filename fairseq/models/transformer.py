@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import math
+import math, sys
 
 import torch
 import torch.nn as nn
@@ -122,6 +122,10 @@ class TransformerModel(FairseqEncoderDecoderModel):
                                  'Must be used with adaptive_loss criterion'),
         parser.add_argument('--adaptive-softmax-dropout', type=float, metavar='D',
                             help='sets adaptive softmax dropout for the tail projections')
+        parser.add_argument('--disable-training-embeddings', action='store_true',
+                            help='if set, fix embedding layers'
+                            ' (this requires to provide pretrained embeddings)')
+
         # fmt: on
 
     @classmethod
@@ -142,10 +146,16 @@ class TransformerModel(FairseqEncoderDecoderModel):
             num_embeddings = len(dictionary)
             padding_idx = dictionary.pad()
             emb = Embedding(num_embeddings, embed_dim, padding_idx)
+
             # if provided, load from preloaded dictionaries
             if path:
                 embed_dict = utils.parse_embedding(path)
                 utils.load_embedding(embed_dict, dictionary, emb)
+            if not path and args.disable_training_embeddings:
+                raise ValueError('Do not set --disable_training_embeddings when pretrained embeddings are not provided.')
+
+            if args.disable_training_embeddings:
+                emb.weight.requires_grad = False
             return emb
 
         if args.share_all_embeddings:
@@ -164,7 +174,7 @@ class TransformerModel(FairseqEncoderDecoderModel):
             args.share_decoder_input_output_embed = True
         else:
             encoder_embed_tokens = build_embedding(
-                src_dict, args.encoder_embed_dim, args.encoder_embed_path
+                src_dict, args.encoder_embed_dim, args.encoder_embed_path,
             )
             decoder_embed_tokens = build_embedding(
                 tgt_dict, args.decoder_embed_dim, args.decoder_embed_path
@@ -551,7 +561,8 @@ def base_architecture(args):
 
     args.decoder_output_dim = getattr(args, 'decoder_output_dim', args.decoder_embed_dim)
     args.decoder_input_dim = getattr(args, 'decoder_input_dim', args.decoder_embed_dim)
-
+    # *modified*
+    args.disable_training_embeddings = getattr(args, 'disable_training_embeddings', False)
 
 @register_model_architecture('transformer', 'transformer_iwslt_de_en')
 def transformer_iwslt_de_en(args):

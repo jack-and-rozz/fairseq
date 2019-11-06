@@ -440,7 +440,6 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
 
     def __init__(self, path):
         super().__init__()
-
         self._path = None
         self._index = None
         self._bin_buffer = None

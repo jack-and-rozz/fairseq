@@ -173,17 +173,22 @@ class Trainer(object):
 
             if embedding_overrides:
                 # Before restoring checkpoint, embeddings were loaded to the model via file so write it to the state.
-                model = self.get_model()
-                state['model']['encoder.embed_tokens.weight'].data = model.encoder.embed_tokens.weight.data
 
-                if hasattr(state['model'], 'decoder.embed_tokens.weight'):
-                    state['model']['decoder.embed_tokens.weight'].data = model.decoder.embed_tokens.weight.data
+                model = self.get_model()
+
+                # TODO: remove magic number.
+                state['model']['encoder.embed_tokens.weight'].data[4:, :] = model.encoder.embed_tokens.weight.data.clone()[4:, :]
+
+                if 'decoder.embed_tokens.weight' in state['model']:
+                    state['model']['decoder.embed_tokens.weight'].data[4:, :] = model.decoder.embed_tokens.weight.data.clone()[4:, :]
+
 
             # load model parameters
             try:
                 self.get_model().load_state_dict(state['model'], strict=True)
                 if utils.has_parameters(self.get_criterion()):
                     self.get_criterion().load_state_dict(state['criterion'], strict=True)
+
             except Exception:
                 raise Exception(
                     'Cannot load model parameters from checkpoint {}; '
@@ -193,6 +198,18 @@ class Trainer(object):
             extra_state = state['extra_state']
             self._optim_history = state['optimizer_history']
             last_optim_state = state.get('last_optimizer_state', None)
+
+        # if embedding_overrides:
+        #     model = self.get_model()
+        #     if 'encoder.embed_tokens.weight' in state['model']:
+        #         enc_vocab_size = int(model.encoder.embed_tokens.weight.data.size()[0])
+        #         for idx in range(enc_vocab_size):
+        #             model.encoder.embed_tokens.weight.data[idx] = state['model']['encoder.embed_tokens.weight'][idx]
+
+        #     if 'decoder.embed_tokens.weight' in state['model']:
+        #         dec_vocab_size = int(model.decoder.embed_tokens.weight.data.size()[0])
+        #         for idx in range(dec_vocab_size):
+        #             model.decoder.embed_tokens.weight.data[idx] = state['model']['decoder.embed_tokens.weight'][idx]
 
         if last_optim_state is not None and not reset_optimizer:
             # rebuild optimizer after loading model, since params may have changed
