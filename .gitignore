@@ -126,3 +126,4 @@ dataset
 checkpoints
 .#*
 *.bak
+_bak
