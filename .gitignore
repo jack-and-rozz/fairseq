@@ -120,5 +120,9 @@ data-bin/
 # reranking
 examples/reranking/rerank_data
 
-# Emacs buffer
+
+######################
+dataset
+checkpoints
 .#*
+*.bak

@@ -109,8 +109,7 @@ def load_checkpoint(args, trainer):
         eval(args.optimizer_overrides),
         embedding_overrides=args.override_embeddings,
         reset_meters=args.reset_meters,
-        args_overrides=args_overrides, # for fine-tuning
-        #model_overrides=eval(args.model_overrides),  # for fine-tuning
+        args_overrides=args_overrides, # *Modified* for fine-tuning
     )
 
     if (

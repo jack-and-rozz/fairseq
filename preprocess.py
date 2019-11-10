@@ -88,11 +88,24 @@ def main(args):
         else:
             tgt_dict = None
 
+    #  Create dictionaries for extra-features
+    ex_feature_dicts = []
+    for feature_type in args.extra_features:
+        ex_feature_dict = task.build_dictionary(
+            [train_path(feature_type)],
+            workers=args.workers,
+            threshold=0,
+            nwords=-1,
+            padding_factor=args.padding_factor,
+        )
+        ex_feature_dict.save(dict_path(feature_type))
+        ex_feature_dicts.append(ex_feature_dict)
+
     src_dict.save(dict_path(args.source_lang))
     if target and tgt_dict is not None:
         tgt_dict.save(dict_path(args.target_lang))
 
-    def make_binary_dataset(vocab, input_prefix, output_prefix, lang, num_workers):
+    def make_binary_dataset(vocab, input_prefix, output_prefix, lang, num_workers, append_eos=True):
         print("| [{}] Dictionary: {} types".format(lang, len(vocab) - 1))
         n_seq_tok = [0, 0]
         replaced = Counter()
@@ -120,7 +133,8 @@ def main(args):
                         prefix,
                         lang,
                         offsets[worker_id],
-                        offsets[worker_id + 1]
+                        offsets[worker_id + 1],
+                        append_eos,
                     ),
                     callback=merge_result
                 )
@@ -131,7 +145,7 @@ def main(args):
         merge_result(
             Binarizer.binarize(
                 input_file, vocab, lambda t: ds.add_item(t),
-                offset=0, end=offsets[1]
+                offset=0, end=offsets[1], append_eos=append_eos,
             )
         )
         if num_workers > 1:
@@ -156,7 +170,8 @@ def main(args):
             )
         )
 
-    def make_dataset(vocab, input_prefix, output_prefix, lang, num_workers=1):
+    def make_dataset(vocab, input_prefix, output_prefix, lang, num_workers=1,
+                     append_eos=True):
         if args.dataset_impl == "raw":
             # Copy original text file to destination folder
             output_text_file = dest_path(
@@ -165,19 +180,22 @@ def main(args):
             )
             shutil.copyfile(file_name(input_prefix, lang), output_text_file)
         else:
-            make_binary_dataset(vocab, input_prefix, output_prefix, lang, num_workers)
+            make_binary_dataset(vocab, input_prefix, output_prefix, lang, num_workers, append_eos=append_eos)
 
-    def make_all(lang, vocab):
+    def make_all(lang, vocab, append_eos=True):
         if args.trainpref:
-            make_dataset(vocab, args.trainpref, "train", lang, num_workers=args.workers)
+            make_dataset(vocab, args.trainpref, "train", lang, num_workers=args.workers, append_eos=append_eos)
         if args.validpref:
             for k, validpref in enumerate(args.validpref.split(",")):
                 outprefix = "valid{}".format(k) if k > 0 else "valid"
-                make_dataset(vocab, validpref, outprefix, lang, num_workers=args.workers)
+                make_dataset(vocab, validpref, outprefix, lang, num_workers=args.workers, append_eos=append_eos)
         if args.testpref:
             for k, testpref in enumerate(args.testpref.split(",")):
                 outprefix = "test{}".format(k) if k > 0 else "test"
-                make_dataset(vocab, testpref, outprefix, lang, num_workers=args.workers)
+                make_dataset(vocab, testpref, outprefix, lang, num_workers=args.workers, append_eos=append_eos)
+
+    for i, feature_type in enumerate(args.extra_features):
+        make_all(feature_type, ex_feature_dicts[i], append_eos=False)
 
     make_all(args.source_lang, src_dict)
     if target:
@@ -260,6 +278,11 @@ def get_offsets(input_file, num_workers):
 
 def cli_main():
     parser = options.get_preprocessing_parser()
+
+    # Modified
+    parser.add_argument('--extra-features', nargs='*', help="List of files which have the same number of lines as the src and the tgt files. Each file contains extra labels including the information of the example's domains, speakers, etc.")
+
+
     args = parser.parse_args()
     main(args)
 

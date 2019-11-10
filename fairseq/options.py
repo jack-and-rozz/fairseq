@@ -251,6 +251,7 @@ def add_preprocess_args(parser):
                        help="Pad dictionary size to be multiple of N")
     group.add_argument("--workers", metavar="N", default=1, type=int,
                        help="number of parallel workers")
+
     # fmt: on
     return parser
 
@@ -402,7 +403,7 @@ def add_checkpoint_args(parser):
     group.add_argument('--maximize-best-checkpoint-metric', action='store_true',
                        help='select the largest metric value for saving "best" checkpoints')
 
-    # Arguments for fine-tuning
+    # *Modified* Arguments for fine-tuning 
     group.add_argument('--reset-args', action='store_true',
                        help='if set, arguments stored in checkpoint are overwritten by current args')
     group.add_argument('--override-embeddings', action='store_true',

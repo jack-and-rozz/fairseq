@@ -15,7 +15,8 @@ from fairseq.data import (
 )
 from collections import defaultdict
 
-from . import FairseqTask, register_task
+from fairseq.tasks import FairseqTask, register_task
+from fairseq.tasks.translation import TranslationTask
 
 
 def load_langpair_dataset(
@@ -24,16 +25,17 @@ def load_langpair_dataset(
     tgt, tgt_dict,
     combine, dataset_impl, upsample_primary,
     left_pad_source, left_pad_target, 
-    max_source_positions, max_target_positions):
+    max_source_positions, max_target_positions,
+    extra_feature_dicts,
+):
     def split_exists(split, src, tgt, lang, data_path):
         filename = os.path.join(data_path, '{}.{}-{}.{}'.format(split, src, tgt, lang))
-        print('split_filename', filename)
         return indexed_dataset.dataset_exists(filename, impl=dataset_impl)
 
     src_datasets = []
     tgt_datasets = []
     
-    extra_label_datasets = defaultdict(list)
+    extra_feature_datasets = defaultdict(list)
 
     for k in itertools.count():
         split_k = split + (str(k) if k > 0 else '')
@@ -55,6 +57,14 @@ def load_langpair_dataset(
             data_utils.load_indexed_dataset(prefix + tgt, tgt_dict, dataset_impl)
         )
 
+        if extra_feature_dicts:
+            for i, feature_type in enumerate(extra_feature_dicts):
+                extra_feature_datasets[feature_type].append(
+                    data_utils.load_indexed_dataset(prefix + feature_type, 
+                                                    extra_feature_dicts[feature_type], 
+                                                    dataset_impl)
+                )
+
         print('| {} {} {}-{} {} examples'.format(data_path, split_k, src, tgt, len(src_datasets[-1])))
 
         if not combine:
@@ -62,26 +72,41 @@ def load_langpair_dataset(
 
     assert len(src_datasets) == len(tgt_datasets)
 
+
     if len(src_datasets) == 1:
         src_dataset, tgt_dataset = src_datasets[0], tgt_datasets[0]
+        extra_feature_datasets = {feature_type: datasets[0] for feature_type, datasets in extra_feature_datasets.items()}
+
     else:
         sample_ratios = [1] * len(src_datasets)
         sample_ratios[0] = upsample_primary
         src_dataset = ConcatDataset(src_datasets, sample_ratios)
         tgt_dataset = ConcatDataset(tgt_datasets, sample_ratios)
+        extra_feature_datasets = {feature_type: ConcatDataset(datasets) for feature_type, datasets in extra_feature_datasets.items()}
 
-    return LanguagePairDataset(
-        src_dataset, src_dataset.sizes, src_dict,
-        tgt_dataset, tgt_dataset.sizes, tgt_dict,
-        left_pad_source=left_pad_source,
-        left_pad_target=left_pad_target,
-        max_source_positions=max_source_positions,
-        max_target_positions=max_target_positions,
-    )
+    if len(extra_feature_datasets.keys()) > 0:
+        return LanguagePairDatasetWithExtraFeatures(
+            src_dataset, src_dataset.sizes, src_dict,
+            tgt_dataset, tgt_dataset.sizes, tgt_dict,
+            left_pad_source=left_pad_source,
+            left_pad_target=left_pad_target,
+            max_source_positions=max_source_positions,
+            max_target_positions=max_target_positions,
+            extra_feature_dicts=extra_feature_dicts,
+            extra_features=extra_feature_datasets
+        )
+    else:
+        return LanguagePairDataset(
+            src_dataset, src_dataset.sizes, src_dict,
+            tgt_dataset, tgt_dataset.sizes, tgt_dict,
+            left_pad_source=left_pad_source,
+            left_pad_target=left_pad_target,
+            max_source_positions=max_source_positions,
+            max_target_positions=max_target_positions,
+        )
 
-
-@register_task('translation')
-class TranslationTask(FairseqTask):
+@register_task('domain_aware_translation')
+class DomainAwareTranslationTask(FairseqTask):
     """
     Translate from one (source) language to another (target) language.
 
@@ -127,13 +152,18 @@ class TranslationTask(FairseqTask):
         parser.add_argument('--upsample-primary', default=1, type=int,
                             help='amount to upsample primary dataset')
 
+        # Modified
+        parser.add_argument('--extra-features', nargs='*', 
+                            help="List of files which have the same number of lines as the src and the tgt files. Each file contains extra features including the information of the example's domains, speakers, etc.")
         # fmt: on
 
-    def __init__(self, args, src_dict, tgt_dict, extra_label_dicts={}):
+    def __init__(self, args, src_dict, tgt_dict, extra_feature_dicts={}):
         super().__init__(args)
         self.src_dict = src_dict
         self.tgt_dict = tgt_dict
 
+        # Modified
+        self.extra_feature_dicts = extra_feature_dicts
 
     @classmethod
     def setup_task(cls, args, **kwargs):
@@ -167,7 +197,13 @@ class TranslationTask(FairseqTask):
         assert src_dict.unk() == tgt_dict.unk()
         print('| [{}] dictionary: {} types'.format(args.source_lang, len(src_dict)))
         print('| [{}] dictionary: {} types'.format(args.target_lang, len(tgt_dict)))
-        return cls(args, src_dict, tgt_dict)
+        # return cls(args, src_dict, tgt_dict)
+
+        extra_feature_dicts = {feature_type:cls.load_dictionary(os.path.join(paths[0], 'dict.{}.txt'.format(feature_type))) for feature_type in args.extra_features}
+        for feature_type, feature_dict in extra_feature_dicts.items():
+            print('| [{}] dictionary: {} types'.format(feature_type, len(feature_dict)))
+
+        return cls(args, src_dict, tgt_dict, extra_feature_dicts=extra_feature_dicts)
 
     def load_dataset(self, split, epoch=0, combine=False, **kwargs):
         """Load a given dataset split.
@@ -190,9 +226,11 @@ class TranslationTask(FairseqTask):
             left_pad_target=self.args.left_pad_target,
             max_source_positions=self.args.max_source_positions,
             max_target_positions=self.args.max_target_positions,
+            extra_feature_dicts=self.extra_feature_dicts,
         )
 
     def build_dataset_for_inference(self, src_tokens, src_lengths):
+        # TODO: add extra-features if exists
         return LanguagePairDataset(src_tokens, src_lengths, self.source_dictionary)
 
     def max_positions(self):
@@ -208,3 +246,23 @@ class TranslationTask(FairseqTask):
     def target_dictionary(self):
         """Return the target :class:`~fairseq.data.Dictionary`."""
         return self.tgt_dict
+
+
+
+class LanguagePairDatasetWithExtraFeatures(LanguagePairDataset):
+    def __init__(self, *args, extra_features={}, extra_feature_dicts={}, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.extra_features = extra_features
+        self.extra_feature_dicts = extra_feature_dicts
+
+    def __getitem__(self, index):
+        item = super().__getitem__(index)
+        for feature_type, features in self.extra_features.items():
+            item[feature_type] = features[index]
+        return item
+
+    def prefetch(self, indices):
+        super().prefetch(indices)
+        for features in self.extra_features.values():
+            features.prefetch(indices)
+
