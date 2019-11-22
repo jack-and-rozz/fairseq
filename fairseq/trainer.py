@@ -15,6 +15,7 @@ import os
 import sys
 
 import torch
+import numpy as np
 
 from fairseq import checkpoint_utils, distributed_utils, models, optim, utils
 from fairseq.meters import AverageMeter, StopwatchMeter, TimeMeter
@@ -176,12 +177,31 @@ class Trainer(object):
 
                 model = self.get_model()
 
-                # TODO: remove magic number.
-                state['model']['encoder.embed_tokens.weight'].data[4:, :] = model.encoder.embed_tokens.weight.data.clone()[4:, :]
+                # TODO: remove magic numbers.
+                prev_enc_embs = state['model']['encoder.embed_tokens.weight'].data
+                new_enc_embs = model.encoder.embed_tokens.weight.data.clone()
 
-                if 'decoder.embed_tokens.weight' in state['model']:
-                    state['model']['decoder.embed_tokens.weight'].data[4:, :] = model.decoder.embed_tokens.weight.data.clone()[4:, :]
+                # Reset the shape of the pretrained model's embedding layer.
+                state['model']['encoder.embed_tokens.weight'] = torch.Tensor(np.zeros(new_enc_embs.shape))
 
+                # Keep the embeddings of 4 special tokens.
+                state['model']['encoder.embed_tokens.weight'].data[:4, :] = prev_enc_embs[:4, :]
+                # Override others by mapped embeddings.
+                state['model']['encoder.embed_tokens.weight'].data[4:, :] = new_enc_embs[4:, :]
+
+                #if model.encoder.embed_tokens != model.decoder.embed_tokens:
+                if True:
+                    prev_dec_embs = state['model']['decoder.embed_tokens.weight'].data
+                    new_dec_embs = model.decoder.embed_tokens.weight.data.clone()
+
+                    # Reset the shape of the pretrained model's embedding layer.
+                    state['model']['decoder.embed_tokens.weight'] = torch.Tensor(np.zeros(new_dec_embs.shape))
+
+
+                    # Keep the embeddings of 4 special tokens.
+                    state['model']['decoder.embed_tokens.weight'].data[:4, :] = prev_dec_embs[:4, :]
+                    # Override others by mapped embeddings.
+                    state['model']['decoder.embed_tokens.weight'].data[4:, :] = new_dec_embs[4:, :]
 
             # load model parameters
             try:

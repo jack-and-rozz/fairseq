@@ -284,6 +284,9 @@ def cli_main():
 
 
     args = parser.parse_args()
+    if not args.extra_features:
+        args.extra_features = {}
+    
     main(args)
 
 

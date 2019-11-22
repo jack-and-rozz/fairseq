@@ -96,6 +96,11 @@ class TransformerModelForFinetuning(TransformerModel):
                             ' (this requires to provide pretrained embeddings)')
 
         # fmt: on
+
+    def __init__(self, encoder, decoder, extra_feature_dicts):
+        super().__init__(encoder, decoder)
+        self.extra_feature_dicts = extra_feature_dicts
+
     @classmethod
     def build_model(cls, args, task):
         """Build a new model instance."""
@@ -150,7 +155,10 @@ class TransformerModelForFinetuning(TransformerModel):
 
         encoder = cls.build_encoder(args, src_dict, encoder_embed_tokens)
         decoder = cls.build_decoder(args, tgt_dict, decoder_embed_tokens)
-        return TransformerModel(encoder, decoder)
+
+        #self.extra_feature_dicts = task.extra_feature_dicts
+        #return TransformerModelForFinetuning(encoder, decoder)
+        return cls(encoder, decoder, task.extra_feature_dicts)
 
     @classmethod
     def build_encoder(cls, args, src_dict, embed_tokens):

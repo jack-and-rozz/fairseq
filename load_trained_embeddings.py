@@ -2,6 +2,7 @@
 import os, re, sys, time, argparse, subprocess
 # import torch
 # from torch.serialization import default_restore_location
+from fairseq.utils import import_user_module
 from fairseq.checkpoint_utils import load_checkpoint_to_cpu
 from fairseq.data.dictionary import Dictionary
 
@@ -23,6 +24,7 @@ def output_trained_embeddings_to_file(emb, dict_path, tgt_path):
         sys.stdout = sys.__stdout__
 
 def main(args):
+    import_user_module(args)
     ckpt_path = args.model_root + '/checkpoints/checkpoint_best.pt'
     # state = torch.load(
     #     ckpt_path, map_location=lambda s, l: default_restore_location(s, 'cpu'),
@@ -46,5 +48,6 @@ if __name__ == "__main__":
   parser.add_argument('model_root', type=str)
   parser.add_argument('srcdict', type=str)
   parser.add_argument('--tgtdict', type=str, default='')
+  parser.add_argument('--user-dir', default=None)
   args = parser.parse_args()
   main(args)

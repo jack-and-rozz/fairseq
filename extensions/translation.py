@@ -5,6 +5,8 @@
 
 import itertools
 import os
+import torch
+import numpy as np
 
 from fairseq import options, utils
 from fairseq.data import (
@@ -12,12 +14,12 @@ from fairseq.data import (
     data_utils,
     indexed_dataset,
     LanguagePairDataset,
+    Dictionary
 )
 from collections import defaultdict
 
 from fairseq.tasks import FairseqTask, register_task
 from fairseq.tasks.translation import TranslationTask
-
 
 def load_langpair_dataset(
     data_path, split,
@@ -158,7 +160,7 @@ class DomainAwareTranslationTask(FairseqTask):
         # fmt: on
 
     def __init__(self, args, src_dict, tgt_dict, extra_feature_dicts={}):
-        super().__init__(args)
+        super(DomainAwareTranslationTask, self).__init__(args)
         self.src_dict = src_dict
         self.tgt_dict = tgt_dict
 
@@ -199,7 +201,10 @@ class DomainAwareTranslationTask(FairseqTask):
         print('| [{}] dictionary: {} types'.format(args.target_lang, len(tgt_dict)))
         # return cls(args, src_dict, tgt_dict)
 
-        extra_feature_dicts = {feature_type:cls.load_dictionary(os.path.join(paths[0], 'dict.{}.txt'.format(feature_type))) for feature_type in args.extra_features}
+        if args.extra_features:
+            extra_feature_dicts = {feature_type:cls.load_dictionary(os.path.join(paths[0], 'dict.{}.txt'.format(feature_type)), weight_by_freq=True) for feature_type in args.extra_features}
+        else:
+            extra_feature_dicts = {}
         for feature_type, feature_dict in extra_feature_dicts.items():
             print('| [{}] dictionary: {} types'.format(feature_type, len(feature_dict)))
 
@@ -247,22 +252,89 @@ class DomainAwareTranslationTask(FairseqTask):
         """Return the target :class:`~fairseq.data.Dictionary`."""
         return self.tgt_dict
 
+    @classmethod
+    def load_dictionary(cls, filename, weight_by_freq=False):
+        """Load the dictionary from the filename
 
+        Args:
+            filename (str): the filename
+        """
+        if weight_by_freq:
+            return DictionaryWithInvFreqWeight.load(filename)
+        else:
+            return Dictionary.load(filename)
+
+class DictionaryWithInvFreqWeight(Dictionary):
+    def __init__(self, *args, **kwargs):
+        super(DictionaryWithInvFreqWeight, self).__init__(*args, **kwargs)
+        self.weights = None # Weights for the losses of imbalanced training data.
+
+    # def finalize(self, *args, **kwargs):
+    #     super(DictionaryWithInvFreqWeight, self).finalize(*args, **kwargs)
+    #     print(self.symbols[:10])
+    #     print(self.count[:10])
+    #     exit(1)
+    def add_from_file(self, *args, **kwargs):
+        '''
+        self.weight[i] should be inversely proportinal to normal_token_counts[i].
+        sum(normal_token_counts) / len(normal_token_counts) is a scale factor to make the expected value of the weight be 1.
+        '''
+        super(DictionaryWithInvFreqWeight, self).add_from_file(*args, **kwargs)
+        n_special_tokens = 4
+        n_normal_tokens = len([s for s in self.symbols[n_special_tokens:] 
+                               if s[:10] != 'madeupword'])
+        n_padding_factor = len(self.symbols) - n_special_tokens - n_normal_tokens
+
+        normal_token_counts = self.count[n_special_tokens:n_special_tokens+n_normal_tokens]
+        sum_normal_token_counts = sum(normal_token_counts)
+        normal_token_weights = [sum_normal_token_counts/(len(normal_token_counts) * c) for c in normal_token_counts] 
+
+        self.weights = [0, 1, 1, 1] + normal_token_weights + [1 for _ in range(n_padding_factor)]
+        self.weights = torch.from_numpy(np.array([float(w) for w in self.weights])).float()
 
 class LanguagePairDatasetWithExtraFeatures(LanguagePairDataset):
+    # def __init__(self, *args, extra_features={}, extra_feature_dicts={}, **kwargs):
+    #     super(LanguagePairDatasetWithExtraFeatures, self).__init__(*args, **kwargs)
+
     def __init__(self, *args, extra_features={}, extra_feature_dicts={}, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(LanguagePairDatasetWithExtraFeatures, self).__init__(*args, **kwargs)
         self.extra_features = extra_features
         self.extra_feature_dicts = extra_feature_dicts
 
     def __getitem__(self, index):
-        item = super().__getitem__(index)
+        item = super(LanguagePairDatasetWithExtraFeatures, self).__getitem__(index)
+
         for feature_type, features in self.extra_features.items():
             item[feature_type] = features[index]
+            if hasattr(self.extra_feature_dicts[feature_type], 'weights'):
+                item[feature_type + '_weights'] = self.extra_feature_dicts[feature_type].weights[features[index]]
+
+        ############## DEBUG #############
+        # print(item)
+        # print(self.src_dict.string(item['source']))
+        # print(self.tgt_dict.string(item['target']))
+        # for feature_type, feature_dict in self.extra_feature_dicts.items():
+        #     print(feature_dict.string(item[feature_type]))
+        # exit(1)
         return item
 
     def prefetch(self, indices):
         super().prefetch(indices)
-        for features in self.extra_features.values():
-            features.prefetch(indices)
+        for feature_type in self.extra_features:
+            self.extra_features[feature_type].prefetch()
 
+    def collater(self, samples):
+        if len(samples) == 0:
+            return {}
+
+        batch = super(LanguagePairDatasetWithExtraFeatures, self).collater(samples)
+
+        for feature_type in self.extra_feature_dicts:
+            values = [s[feature_type] for s in samples]
+            batch[feature_type] = data_utils.collate_tokens(values, 0, left_pad=False, move_eos_to_beginning=False)
+
+            if hasattr(self.extra_feature_dicts[feature_type], 'weights'):
+                weights = [s[feature_type + '_weights'] for s in samples]
+                batch[feature_type + '_weights'] = data_utils.collate_tokens(weights, 0, left_pad=False, move_eos_to_beginning=False)
+
+        return batch
