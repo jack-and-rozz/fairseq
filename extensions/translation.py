@@ -308,14 +308,6 @@ class LanguagePairDatasetWithExtraFeatures(LanguagePairDataset):
             item[feature_type] = features[index]
             if hasattr(self.extra_feature_dicts[feature_type], 'weights'):
                 item[feature_type + '_weights'] = self.extra_feature_dicts[feature_type].weights[features[index]]
-
-        ############## DEBUG #############
-        # print(item)
-        # print(self.src_dict.string(item['source']))
-        # print(self.tgt_dict.string(item['target']))
-        # for feature_type, feature_dict in self.extra_feature_dicts.items():
-        #     print(feature_dict.string(item[feature_type]))
-        # exit(1)
         return item
 
     def prefetch(self, indices):

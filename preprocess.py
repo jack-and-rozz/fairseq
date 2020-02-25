@@ -88,7 +88,7 @@ def main(args):
         else:
             tgt_dict = None
 
-    #  Create dictionaries for extra-features
+    # Create dictionaries for extra-features
     ex_feature_dicts = []
     for feature_type in args.extra_features:
         ex_feature_dict = task.build_dictionary(
