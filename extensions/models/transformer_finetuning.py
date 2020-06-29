@@ -35,6 +35,8 @@ from fairseq.modules import (
     TransformerEncoderLayer,
 )
 
+
+
 @register_model('transformer_finetuning')
 class TransformerModelForFinetuning(TransformerModel):
     @staticmethod
@@ -122,7 +124,8 @@ class TransformerModelForFinetuning(TransformerModel):
 
             # if provided, load from preloaded dictionaries
             if path:
-                embed_dict = utils.parse_embedding(path)
+                # embed_dict = utils.parse_embedding(path)
+                embed_dict = parse_embedding(path)
                 utils.load_embedding(embed_dict, dictionary, emb)
             if not path and args.disable_training_embeddings:
                 raise ValueError('Do not set --disable_training_embeddings when pretrained embeddings are not provided.')
@@ -176,4 +179,35 @@ def base_architecture(args):
     args.disable_training_embeddings = getattr(args, 'disable_training_embeddings', False)
 
 
+
+
+def parse_embedding(embed_path):
+    """Parse embedding text file into a dictionary of word and embedding tensors.
+
+    The first line can have vocabulary size and dimension. The following lines
+    should contain word and embedding separated by spaces.
+
+    Example:
+        2 5
+        the -0.0230 -0.0264  0.0287  0.0171  0.1403
+        at -0.0395 -0.1286  0.0275  0.0254 -0.0932
+    """
+    embed_dict = {}
+    with open(embed_path) as f_embed:
+        # next(f_embed)  # skip header
+        # for line in f_embed:
+        #     pieces = line.rstrip().split(" ")
+        #     embed_dict[pieces[0]] = torch.Tensor([float(weight) for weight in pieces[1:]])
+        line = f_embed.readline()
+        while line:
+            #pieces = line.rstrip().split(" ")
+            pieces = line.strip().split(" ")
+            embed_dict[pieces[0]] = torch.Tensor([float(weight) for weight in pieces[1:]])
+            try:
+                line = f_embed.readline()
+            except Exception as e:
+                print(e, file=sys.stderr)
+                continue
+
+    return embed_dict
 

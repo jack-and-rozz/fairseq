@@ -60,12 +60,11 @@ def main(args, init_distributed=False):
     config_path = model_root + '/config.yaml'
     params_path = model_root + '/parameters.txt'
     arch_path = model_root + '/architecture.txt'
+    
     output_config(args, config_path)
 
     # Setup task, e.g., translation, language modeling, etc.
     task = tasks.setup_task(args)
-
-
 
     # Load valid dataset (we load training data below, based on the latest checkpoint)
     for valid_sub_split in args.valid_subset.split(','):

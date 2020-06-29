@@ -26,6 +26,7 @@ def collate(
     src_tokens = merge('source', left_pad=left_pad_source)
     # sort by descending source length
     src_lengths = torch.LongTensor([s['source'].numel() for s in samples])
+
     src_lengths, sort_order = src_lengths.sort(descending=True)
     id = id.index_select(0, sort_order)
     src_tokens = src_tokens.index_select(0, sort_order)
